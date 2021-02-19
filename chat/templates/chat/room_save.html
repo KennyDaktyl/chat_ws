@@ -1,0 +1,149 @@
+{% extends 'babilon/base_owner.html' %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% crispy from form.helper %}
+
+{% block content %}
+
+<div class="col-12 m-0 p-0 row">
+    <nav aria-label="breadcrumb col-lg-10">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'local_status' %}">Start</a></li>
+            <li class="breadcrumb-item active" aria-current="page"><strong>Chat babilon</strong></li>
+        </ol>
+    </nav>
+</div>
+<p class="col-12 text-center" id="user" value="{{username}}">{{author}}</p>
+<!-- <textarea id="chat-log" cols="100" rows="20"></textarea><br> -->
+<div class="col-12 row">
+    <input class="mt-2 col-8 mx-auto" id="chat-message-input" type="text" size="100"><br>
+    <input class="mt-2 col-3 mx-auto btn btn-outline-success" id="chat-message-submit" type="button" value="Send">
+</div>
+<div class="msq col-12 row">
+            <ul id="chat-log" class="col-12 row">
+                {% for el in msg %}
+                {% if el.author.user.username == author %}
+                <li class="col-12 text-secondary text-left ">{{el.timestamp}} {{el.author.username}} {{el.content}}</li><br>
+                {% else %}
+                 <li class="col-12 text-primary text-right">{{el.timestamp}} {{el.author.username}} {{el.content}}</li><br>
+                {% endif %}
+                 {% endfor %}
+            </ul>
+</div>
+
+
+{{ room_name|json_script:"room-name" }}
+
+<script src="{% static 'reconnecting-websocket.js' %}"></script>
+<script>
+    var roomName = {{ room_name }};
+    var username = {{ username }};
+
+    var ws_scheme = window.location.protocol == "https:" ? "wss" : "ws";
+    var chatSocket = new ReconnectingWebSocket( (window.location.protocol == 'https:' ? 'wss://' : 'ws://')
+        + window.location.host
+        // +'127.0.0.1'
+        + '/ws/chat/' +
+        roomName +
+        '/');
+        
+    
+    // ws_scheme + '://' + window.location.host +  '/ws/chat/' +
+    //     roomName +
+    //     '/');
+
+    // new WebSocket(
+    //     (window.location.protocol == 'https:' ? 'wss://' : 'ws://')
+    //     + window.location.host
+    //     + '/ws/'
+// );
+    // console.log( window.location.protocol,ws_scheme,window.location.host);
+    // const chatSocket = new ReconnectingWebSocket(
+    //     'ws://' +
+    //     window.location.host +
+    //     '/ws/chat/' +
+    //     roomName +
+    //     '/'
+    // );
+
+    function fetchMessages() {
+        chatSocket.send(JSON.stringify({
+            'command': 'fetch_messages'
+        }));
+    }
+    chatSocket.onopen = function (e) {
+        fetchMessages();
+    }
+
+
+
+    chatSocket.onmessage = function (e) {
+        const data = JSON.parse(e.data);
+
+         console.log('onmessage');
+
+        if (data['command'] === 'message') {
+            for (let i = 0; i < data['messages'].length; i++) {
+                createMessage(data['messages'][i]);
+                console.log('messages',i);
+            }
+        } else if (data['command'] === 'new_message') {
+            createMessage(data['message']);
+             console.log('else if',data);
+        }
+    }
+
+    chatSocket.onclose = function (e) {
+        console.error('Chat zamknięto niespodziewanie');
+    }
+
+    function createMessage(data) {
+        var author = data['author'];
+        var time = data['timestamp'];
+        var msg_content=data['content'];
+        var new_msg = $('<li/>', {
+            html: time+":  <strong class='text-primary'> "+author+"</strong>, : " + msg_content,
+            class: '',
+                                });
+        // var msgListTag = document.createElement('li');
+        var msgListTag=$('#chat-log');
+        new_msg.textContent = data.content;
+
+        if (author === username) {
+            new_msg.addClass('col-12 text-secondary text-left');
+        } else {
+            new_msg.addClass('col-12 text-secondary text-right');
+        }
+
+        // msgListTag.appendChild(new_msg);
+        var msg_list = $('#chat-log');
+        // .appendChild(msgListTag);
+        new_msg.prependTo(msg_list);
+        new_msg.insertBefore(new_msg, msg_list.firstChild);
+        msg_list.insertBefore(msgListTag, msg_list.firstChild);
+    };
+
+
+    document.querySelector('#chat-message-input').focus();
+    document.querySelector('#chat-message-input').onkeyup = function (e) {
+        if (e.keyCode === 13) { // enter, return
+            document.querySelector('#chat-message-submit').click();
+        }
+    };
+
+    document.querySelector('#chat-message-submit').onclick = function (e) {
+        const messageInputDom = document.querySelector('#chat-message-input');
+        const message = messageInputDom.value;
+        // var author=document.getElementById('user').textContent;
+        chatSocket.send(JSON.stringify({
+            'message': message,
+            'command': 'new_message',
+            'from': username,
+
+        }));
+        messageInputDom.value = '';
+    };
+</script>
+{% endblock %}
+{% block script %}
+{% endblock %}
